@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Kohorte, a peer-to-peer protocol for sharing git repositories
+# Copyright (c) 2015, Michael Toren <kohorte@toren.net>
+# Released under the terms of the GNU GPL, version 2
+
+# This is the git-remote helper, called by git-remote when it encounters a
+# 'p2p://' URL that it can't understand.  This script changes the URL, and
+# execs git-http-remote.  Kohorte sets the 'http_proxy' environment variable
+# before this script is executed to point to the HTTP proxy it's running,
+# which git-remote-http will then connect to.
+#
+# git-remote calls remote helpers with the arguments "<branch> <url>".  We
+# discard the URL, replacing it with the fixed HTTP URL expected by the
+# Kohorte HTTP proxy.
+
+BRANCH="$1"
+PROGRAM="$(git --exec-path)/git-remote-http"
+exec "$PROGRAM" "$1" http://p2p/

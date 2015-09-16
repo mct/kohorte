@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# Calls lsof for each Kohorte process found, to check for fd leaks.
+
+for i in $(ps aux | grep [k]ohorte | awk '{print $2}'); do lsof -np $i; echo; done

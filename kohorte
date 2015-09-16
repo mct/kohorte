@@ -1,0 +1,140 @@
+#!/usr/bin/env python
+# vim:set ts=4 sw=4 ai et:
+
+# Kohorte, a peer-to-peer protocol for sharing git repositories
+# Copyright (c) 2015, Michael Toren <kohorte@toren.net>
+# Released under the terms of the GNU GPL, version 2
+
+import sys
+import argparse
+import os
+import socket
+import getpass
+
+import p2p.config as config
+
+from p2p.listener import Listener
+from p2p.cli import CLI
+from p2p.eventloop import EventLoop
+from p2p.swarm import Swarm
+from p2p.peer import Peer
+from p2p.lpd import LPD
+from p2p.tracker import Tracker
+from p2p.util import *
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port',       type=int,   default=None)
+    parser.add_argument('--config',     type=str,   default=[], action='append')
+    parser.add_argument('--no-prune',   action='store_true', help='Prevent passing --prune to git fetch')
+    parser.add_argument('--auto-merge', action='store_true', help='Merge to local branch, if fast-forward is possible. DANGEROUS.')
+    parser.add_argument('--no-pex',     action='store_true', help='Do not use Peer Exchange to find more peers')
+    parser.add_argument('--no-tracker', action='store_true', help='Do not use the default tracker, ' + config.default_tracker)
+    parser.add_argument('--no-lpd',     action='store_true', help='Disable multicast Local Peer Discovery')
+    parser.add_argument('--lpd-time',   type=int,   default=600, help='How often to send LPD messages')
+    parser.add_argument('--lpd-retry',  type=int,   default=60, help='Time to wait between LPD retries, after socket error')
+    parser.add_argument('--peerid',     type=str,   default=None)
+    parser.add_argument('--add',        type=str,   default=[], action='append', help='Add a swarm by specifying its directory')
+    parser.add_argument('--connect',    type=str,   default=[], action='append', help='Connect to a peer at ip:port')
+    parser.add_argument('--tracker',    type=str,   default=[], action='append', help='Specify a tracker, other than the default')
+    parser.add_argument('-x', '--cmd',  type=str,   default=[], action='append', help='Execute a CLI command')
+    parser.add_argument('-q','--no-rc', action='store_true', help='Do not read ~/.kohorte')
+    parser.add_argument('directory',    type=str,   nargs='*')
+
+    args = parser.parse_args()
+    Peer.my_peerid = config.default_peerid
+    cli = CLI()
+
+    ## First, read the config files
+    rc = os.path.expanduser('~/.kohorte')
+
+    if not args.no_rc and os.path.exists(rc):
+        args.config.insert(0, rc)
+
+    for filename in args.config:
+        line_num = 0
+        for line in open(filename):
+            line_num += 1
+            line = line.rstrip()
+            line = line.split('#')[0]
+            if not line:
+                continue
+            if not cli.command(line, raise_=True):
+                print "Error at %s, line %d: %s" % (filename, line_num, repr(line))
+                sys.exit(1)
+
+    ## Next, check command line arguments for flags to modify
+    if args.no_prune:
+        config.prune = False
+
+    if args.auto_merge:
+        print timestamp(), "WARNING! Automerge enabled"
+        config.automerge = True
+
+    for x in args.add + args.directory:
+        Swarm(x)
+
+    for x in args.connect:
+        line = 'connect ' + x.replace(':', ' ', 1)
+        if not cli.command(line, raise_=True):
+            print "Error:", repr(line)
+            sys.exit(1)
+
+    if args.peerid:
+        Peer.my_peerid = args.peerid
+
+    if args.port is not None:
+        config.listen_port = args.port
+
+    listen = Listener(('', config.listen_port))
+    listen_host, listen_port = listen.addr
+
+    if args.no_tracker:
+        print timestamp(), "Not starting tracker"
+    else:
+        if not args.tracker:
+            args.tracker.append(config.default_tracker)
+
+        for x in args.tracker:
+            tracker_host, tracker_port = x.split(':')
+            Tracker(tracker_host, int(tracker_port), listen_port)
+
+    if args.no_lpd:
+        print timestamp(), "Not starting Local Peer Discovery"
+    else:
+        LPD(listen_port, args.lpd_time, args.lpd_retry)
+
+    if args.no_pex:
+        Peer.pex = False
+
+    ## Last, execute the -x CLI commands
+    for x in args.cmd:
+        cli.command(x, raise_=True)
+
+    # Set up PATH so that p2p:// URLs are serviced by our git-remote-p2p bash script
+    assert len(os.environ['PATH']) > 0
+    bindir = os.path.dirname(sys.argv[0]) + '/helpers'
+    bindir = os.path.abspath(bindir)
+    os.environ['PATH'] = bindir + ':' + os.environ['PATH']
+
+    print timestamp(), "My PeerID is", repr(Peer.my_peerid)
+
+    if not Swarm.list():
+        print timestamp(), "Not participating in any swarms?"
+
+    try:
+        EventLoop().loop()
+    except KeyboardInterrupt:
+        # If we were nicer, we'd tell the tracker we're shutting down
+        print "Quit"
+
+if __name__ == '__main__':
+    # Unbuffer stdout (simulating python's "-u" flag)
+    sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+
+    # Redirect stderror to stdout
+    old = sys.stderr
+    sys.stderr = sys.stdout
+    old.close()
+
+    main()

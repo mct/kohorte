@@ -116,7 +116,6 @@ class PeerConnection(object):
         self.host = addr[0]
         self.port = addr[1]
 
-        self.writebuf = ''
         self.readbuf = ''
         self.parse_state = STATE_START
         self.parse_len = 0
@@ -182,13 +181,6 @@ class PeerConnection(object):
 
         print timestamp(), self, "Closing Connection"
 
-        if self.writebuf:
-            print timestamp(), self, "Flushing %d byte writebuf" % len(self.writebuf)
-            try:
-                self.on_writable()
-            except Exception:
-                print timestamp(), self, "Failed to flush: %s" % repr(self.writebuf)
-
         try:
             self.sock.close()
         except Exception:
@@ -205,13 +197,11 @@ class PeerConnection(object):
         if self.closed:
             return False
 
-        if not self.connected:
+        elif not self.connected:
             return True
 
-        if self.writebuf:
-            return True
-
-        return False
+        else:
+            return False
 
     def wants_readable(self):
         if self.closed:
@@ -238,23 +228,6 @@ class PeerConnection(object):
     def on_writable(self):
         if not self.connected:
             self.on_connect()
-            return
-
-        if self.writebuf == '':
-            raise Exception("on_writable called but no writebuf?")
-
-        try:
-            n = self.sock.send(self.writebuf)
-            if n > 0:
-                self.writebuf = self.writebuf[n:]
-        except socket.error, e:
-            if e.errno == errno.EINTR:
-                print timestamp(), self, "send() EINTR, ignoring"
-            if e.errno == errno.EWOULDBLOCK:
-                print timestamp(), self, "send() out of SO_SNDBUF space"
-                raise
-            else:
-                raise
 
     def on_readable(self):
         try:
@@ -437,6 +410,17 @@ class PeerConnection(object):
         else:
             print timestamp(), self, "No handler found for", name, msg
 
+    def send(self, buf):
+        try:
+            n = self.sock.send(buf)
+        except socket.error, e:
+            print timestamp(), self, "Socket error:", str(e)
+            self.close()
+
+        if n != len(buf):
+            print timestamp(), self, "Partial write, %d of %d bytes. SO_SNDBUF full?" % (n, len(buf))
+            self.close()
+
     def send_msg(self, name_, **msg):
         '''
         Send an outgoing Message, translating function keyword arguments into
@@ -465,4 +449,4 @@ class PeerConnection(object):
 
         del msg['msg']
         print timestamp(), self, "--> ", name_, repr_msg(msg)
-        self.writebuf += buf
+        self.send(buf)

@@ -150,7 +150,6 @@ class Proxy(object):
         self.addr = addr
         self.peer = peer
         self.readbuf = ''
-        self.writebuf = ''
         self.bytes_read = 0
         self.request = ''
         self.idle_timeout = time.time()
@@ -193,37 +192,19 @@ class Proxy(object):
 
         EventLoop.unregister(self)
 
-    def wants_writable(self):
-        if self.closed:
-            return False
-
-        if self.writebuf or self.eof:
-            return True
-
-        return False
-
     def wants_readable(self):
         if not self.closed:
             return True
 
-    def on_writable(self):
-        if self.writebuf == '':
-            raise Exception("on_writable called but we have no writebuf?")
-
+    def send(self, buf):
         try:
-            n = self.sock.send(self.writebuf)
-            if n > 0:
-                self.writebuf = self.writebuf[n:]
+            n = self.sock.send(buf)
         except socket.error, e:
-            if e.errno == errno.EINTR:
-                print timestamp(), self, "send() EINTR, ignoring"
-            if e.errno == errno.EWOULDBLOCK:
-                print timestamp(), self, "send() out of SO_SNDBUF space, closing"
-                self.close()
-            else:
-                raise
+            print timestamp(), self, "Socket error:", str(e)
+            self.close
 
-        if self.eof and self.writebuf == '':
+        if n != len(buf):
+            print timestamp(), self, "Partial write, %d of %d bytes. SO_SNDBUF full?" % (n, len(buf))
             self.close()
 
     def on_readable(self):
@@ -304,11 +285,13 @@ class Proxy(object):
             #print timestamp(), self, "file_get EOF"
 
             if self.sent_header:
-                self.writebuf += '0\r\n\r\n'
+                self.send('0\r\n\r\n')
             else:
                 print timestamp(), self, "File not found (or empty):", self.filename
+                buf = ''
                 for x in ['HTTP/1.1 404 Not Found'] + headers:
-                    self.writebuf += x + '\r\n'
+                    buf += x + '\r\n'
+                self.send(buf)
 
             self.eof = True
             return
@@ -316,7 +299,6 @@ class Proxy(object):
         if not self.sent_header:
             self.sent_header = True
             for x in ['HTTP/1.1 200 OK'] + headers:
-                self.writebuf += x + '\r\n'
+                self.send(x + '\r\n')
 
-        self.writebuf += '%x' % len(data) + '\r\n'
-        self.writebuf += data + '\r\n'
+        self.send('%x' % len(data) + '\r\n' + data + '\r\n')

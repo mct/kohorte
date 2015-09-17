@@ -42,9 +42,10 @@ max_peers = 100
 
 ## Trackers
 default_tracker = 'tr.iz.is:6969'
-max_tracker_interval = 60*30
+tracker_max_interval = 60*30
 tracker_socket_retry = 10
-tracker_mute_time = 20
+tracker_mute_time = 5
+tracker_retry_time = 15
 
 ## Local Peer Discovery
 mcast_grp = '239.192.152.143'   # The bittorrent multicast group

@@ -544,3 +544,18 @@ class CLI(object):
             for s in t.swarms.keys():
                 print t, s
                 t.swarms[s] = 0
+
+    # Deliberately corrupt the Tracker connection ID, for testing
+    def cmd_corrupt_connid(self, args):
+        for t in Tracker.list():
+            t.conn_id = 42
+            print t, "connection ID set to 42"
+
+    def cmd_tracker(self, args):
+        pass
+
+    def cmd_remotes(self, args):
+        for s in Swarm.list():
+            print 'Remotes for %s:' % s
+            for r in s.git.remotes():
+                print '    ', r

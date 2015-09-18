@@ -214,26 +214,29 @@ Kohorte is implemented using a single-threaded, custom event loop.
 
 ## Roadmap to 1.0
 
-A list of milestones and dot releases to reach Version 1.0.  Development will
-take place in the `mct-dev` branch, rebased into `master` for each dot release.
-`master` will always be releasable, although there may be protocol
-incompatibilities between dot releases.
+A list of milestones and dot releases to reach 1.0.  Releases will be tagged
+on `master`.  Development will largely take place in the `mct-dev` branch and
+periodically rebased into `master`, which will always be kept in a releasable
+state.
 
-- **Version 0.1**
+There may be protocol incompatibilities between dot releases.
 
-  - Initial public release!  Rejoice!
+- ~~**Version 0.1**~~
 
+  - ~~Initial public release!  Rejoice!~~
 
 - **Version 0.2**
 
-  - Add `set` and `show` commands to modify variables in the `config` module
+  - ~~Re-write tracker.py as a state machine~~
+
+  - ~~Update connection.py and proxy.py's writebuf logic to use `SO_SNDBUF`~~
+
+  - ~~Add `set` and `show` commands to modify variables in the `config` module~~
 
   - Persistent peers &mdash; a list of `{IP, port, PeerID}` tuples to connect to on a
     regular basis, if there is no existing connection to `PeerID`.
 
   - Fix the idle timeout logic
-
-  - The `PeerConnection writebuf` logic may not be using `SO_SNDBUF` as intended
 
   - Stagger pings, LPD announcements, and outbound connection attempts.
 

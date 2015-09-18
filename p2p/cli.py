@@ -83,7 +83,7 @@ class CLI(object):
     def __init__(self):
         self.fd = sys.stdin
         self.readbuf = ''
-        self.commands = [ x.replace('cmd_', '', 1)
+        self.commands = [ x.replace('cmd_', '', 1).replace('_', '-')
                           for x in dir(self)
                           if x.startswith('cmd_') ]
 
@@ -93,6 +93,12 @@ class CLI(object):
         self.peer_order = []
         self.peer_index = 0
         self.peer = None
+
+        self.configurable = [ x for
+                              x in dir(config)
+                              if not x.startswith('__')
+                              and x not in config.danger ]
+        self.configurable.sort()
 
         EventLoop.register(self)
 
@@ -206,7 +212,7 @@ class CLI(object):
             return
 
         cmd = possible[0]
-        fn = 'cmd_' + cmd
+        fn = 'cmd_' + cmd.replace('-', '_')
 
         print ">>", cmd, ' '.join(args)
 
@@ -556,6 +562,72 @@ class CLI(object):
 
     def cmd_remotes(self, args):
         for s in Swarm.list():
-            print 'Remotes for %s:' % s
+            print 'Remotes for %s, %s:' % (s, s.directory)
             for r in s.git.remotes():
                 print '    ', r
+            print
+
+    def cmd_timestamp(self, args):
+        print timestamp()
+        print
+
+    def cmd_show(self, args):
+        if not args:
+            for key in self.configurable:
+                display = key.replace('_', '-')
+                print display + ': ' + str(getattr(config, key))
+            print
+            return
+
+        key = args[0].replace('-', '_')
+
+        if key not in self.configurable:
+            print "Unknown configurable"
+            return False
+
+        print str(getattr(config, key))
+
+    def cmd_set(self, args):
+        if len(args) < 2:
+            self.cmd_show(args)
+            return
+
+        if len(args) != 2:
+            print "Usage: <configurable> <value>"
+            return False
+
+        key = args[0].replace('-', '_')
+        val = args[1]
+
+        if key not in self.configurable:
+            print "Unknown configurable"
+            return False
+
+        current_val = getattr(config, key)
+
+        if type(current_val) is str:
+            setattr(config, key, val)
+
+        elif type(current_val) is int:
+            setattr(config, key, int(val))
+
+        elif type(current_val) is float:
+            setattr(config, key, float(val))
+
+        elif type(current_val) is bool:
+            val = val.lower()
+
+            if val == 'true' or val == '1' or val == 't':
+                setattr(config, key, True)
+
+            elif val == 'false' or val == '0' or val == 'f' or val == 'nil':
+                setattr(config, key, False)
+
+            else:
+                print "Value must be either True or False"
+                return False
+
+        else:
+            raise Exception("Unsupported type")
+
+        print getattr(config, key)
